@@ -18,13 +18,13 @@ if cmdline[0] == "--server":
     )
 else:
     from btrfsbackup.client import client_io, StandardStorageDriver
+    subvolume, cmdline = head(cmdline)
+    local_repo, cmdline = head(cmdline)
     subproc = subprocess.Popen(
         cmdline, # ['python', './server.py', '/tmp/backups'],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
     )
-    storage_driver = StandardStorageDriver(
-        '/btrfs/home', '/btrfs/home.arc'
-    )
+    storage_driver = StandardStorageDriver(subvolume, local_repo)
     client_io(storage_driver, subproc)
 
