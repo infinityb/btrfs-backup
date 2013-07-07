@@ -1,0 +1,8 @@
+message Graph {
+	message GraphEdge {
+		required string from_node = 1;
+		required string to_node = 2;
+	}
+	repeated GraphEdge edges = 1;
+}
+
