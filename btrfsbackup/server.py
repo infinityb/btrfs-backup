@@ -62,7 +62,8 @@ def server_io(driver, instream, outstream):
         return graph.SerializeToString()
 
     # validate magic number
-    assert instream.read(len(common.magic_number)) == common.magic_number
+    if instream.read(len(common.magic_number)) != common.magic_number:
+        raise Exception("Invalid magic number")
 
     # send graph
     write_framed(_serialize_graph())

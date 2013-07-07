@@ -14,7 +14,7 @@ class BackupDirectedAcyclicGraph(object):
     MAX_HEIGHT = 3
     MAX_CHILDREN_FOR_DEPTH = {
         1: 4,
-        2: 7,
+        2: 8,
         3: 24
     }
 
@@ -75,6 +75,7 @@ class BackupDirectedAcyclicGraph(object):
                 self._local_nodes.remove(node)
 
     def best_parent(self):
+        return sorted(set(self._local_nodes) & set(self._reverse), reverse=True)[0]
         # find most recent backup who meets the following conditions:
         #    whose depth is less than MAX_HEIGHT
         #    who has fewer than the maximum allowed children

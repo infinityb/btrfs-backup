@@ -115,7 +115,6 @@ def client_io(storage_driver, subprocess):
     subprocess.stdin.write(common.magic_number)
     graph = wire_pb2.Graph()
     graph.ParseFromString(read_framed())
-    print "current graph = (%s)" % str(graph).strip()
 
     # select parent and make edge (parent, current)
     local_nodes = storage_driver.get_local_nodes()
@@ -130,9 +129,6 @@ def client_io(storage_driver, subprocess):
 
         write_framed(edge.SerializeToString())
         subprocess.stdout.close()
-        print "sent edge = (%s)" % str(edge).strip()
-
-        # open btrfs stream at input_file
 
         for piece in yield_pieces(stream):
             subprocess.stdin.write(piece)

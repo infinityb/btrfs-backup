@@ -8,7 +8,9 @@ Pattern:
 from contextlib import contextmanager
 import os, hashlib, struct, shutil
 piece_size = 4 * 1024**2 # 4MB
+
 magic = b'reliable-encap'
+end_magic = b'reliable-encap-end'
 
 
 class FileExists(Exception):
@@ -30,12 +32,13 @@ def yield_pieces(input_file):
         yield hasher.digest()
         if not buf:
             break
+    yield end_magic
 
 
 def yield_input(input_file):
     hasher = hashlib.sha256()
     if not input_file.read(len(magic)) == magic:
-        raise IntegrityError("Magic number missing")
+        raise IntegrityError("Beginning magic number missing")
     while True:
         length, = struct.unpack('!I', input_file.read(struct.calcsize('!I')))
         buf = input_file.read(length)
@@ -43,9 +46,11 @@ def yield_input(input_file):
         cur_hash = input_file.read(hasher.digest_size)
         if not hasher.digest() == cur_hash:
             raise IntegrityError("Hash Mismatch")
-        if not buf:
+        if length == 0:
             break
         yield buf
+    if not input_file.read(len(end_magic)) == end_magic:
+        raise IntegrityError("Terminating magic number missing")
 
 
 @contextmanager
