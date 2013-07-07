@@ -33,4 +33,7 @@ Requirements
 TODO
 ------------------------
 * Use argparse
+* Nice error messages for the user
+* Pluggable policies
+* Local snapshot pruning based on policies
 * Implement some nice parent selection algorithms since none exist right now.
