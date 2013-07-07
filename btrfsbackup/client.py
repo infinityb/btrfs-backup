@@ -5,7 +5,7 @@ from datetime import datetime
 from functools import partial
 from contextlib import contextmanager
 
-from .reliable_rw import yield_pieces
+from .reliable_rw import yield_pieces, yield_pieces_output_manager
 from . import wire_pb2
 from . import common
 from .graphanalyze import BackupDirectedAcyclicGraph
@@ -75,18 +75,23 @@ class StandardStorageDriver(StorageDriver):
         if 0 != retval:
             raise NonZeroReturn("btrfs command failure", retval)
         try:
-            subproc = subprocess.Popen([
+            args = [
                 'btrfs', 'send', '-p',
                 self.node_to_filename(from_node),
                 self.node_to_filename(to_node)
-            ], stdout=subprocess.PIPE)
-            yield subproc.stdout
+            ]
+            print ' '.join(args)
+            subproc = subprocess.Popen(args, stdout=subprocess.PIPE)
+            yield subproc
             subproc.stdout.close()
             retval = subproc.wait()
             if 0 != retval:
                 raise NonZeroReturn("btrfs command failure", retval)
         except:
-            subproc.kill()
+            try:
+                subproc.kill()
+            except OSError:
+                pass
             raise
         finally:
             subproc.stdout.close()
@@ -122,16 +127,16 @@ def client_io(storage_driver, subprocess):
 
     newshot_node = storage_driver.generate_node_name()
 
-    with storage_driver.get_snapstream(best_parent, newshot_node) as stream:
-        edge = wire_pb2.Graph.GraphEdge()
-        edge.from_node = best_parent
-        edge.to_node = newshot_node
+    edge = wire_pb2.Graph.GraphEdge()
+    edge.from_node = best_parent
+    edge.to_node = newshot_node
+    write_framed(edge.SerializeToString())
+    subprocess.stdout.close()
 
-        write_framed(edge.SerializeToString())
-        subprocess.stdout.close()
+    with yield_pieces_output_manager(subprocess.stdin) as sink:
+        with storage_driver.get_snapstream(best_parent, newshot_node) as btrfs_send:
+            for piece in yield_pieces(btrfs_send.stdout, with_magic=False):
+                sink.write(piece)
 
-        for piece in yield_pieces(stream):
-            subprocess.stdin.write(piece)
-        subprocess.stdin.close()
-
+    subprocess.stdin.close()
     subprocess.wait()

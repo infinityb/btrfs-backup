@@ -1,13 +1,22 @@
 #!/usr/bin/python
 """
 Pattern:
-	a 32 bit integer, network byte order specifying the piece size `n'
-	the piece: n bytes of data (read from the input stream)
-	the sha256 up until this point.
+    magic number
+    while we have data:
+        a 32 bit integer, network byte order specifying the piece size `n'
+        the piece: n bytes of data (read from the input stream)
+        the sha256 up until this point.
+    end magic number
 """
 from contextlib import contextmanager
-import os, hashlib, struct, shutil
-piece_size = 4 * 1024**2 # 4MB
+import os
+import hashlib
+import struct
+import shutil
+
+
+piece_size = 4 * 1024 ** 2  # 4MB
+
 
 magic = b'reliable-encap'
 end_magic = b'reliable-encap-end'
@@ -21,9 +30,10 @@ class IntegrityError(ValueError):
     pass
 
 
-def yield_pieces(input_file):
+def yield_pieces(input_file, with_magic=True):
+    if with_magic:
+        yield magic
     hasher = hashlib.sha256()
-    yield magic
     while True:
         buf = input_file.read(piece_size)
         hasher.update(buf)
@@ -32,7 +42,20 @@ def yield_pieces(input_file):
         yield hasher.digest()
         if not buf:
             break
-    yield end_magic
+    if with_magic:
+        yield end_magic
+
+
+@contextmanager
+def yield_pieces_output_manager(output_file):
+    output_file.write(magic)
+    try:
+        yield output_file
+        output_file.write(end_magic)
+    except:
+        output_file.write("poison")
+    finally:
+        output_file.close()
 
 
 def yield_input(input_file):
@@ -68,7 +91,7 @@ def transactional_write(filename):
 
 
 if __name__ == '__main__':
-    import sys, os, shutil
+    import sys
     cmd = os.path.basename(sys.argv[0])
     if cmd == 'reliable-encap':
         for piece in yield_pieces(sys.stdin):
