@@ -1,28 +1,12 @@
 #!/usr/bin/python
 import os
 import subprocess
-from datetime import datetime
 from functools import partial
 from contextlib import contextmanager
 
 from .reliable_rw import yield_pieces, yield_pieces_output_manager
 from . import wire_pb2
 from . import common
-from .graphanalyze import BackupDirectedAcyclicGraph
-
-# data = [
-#     ('2013-07-01', '2013-07-02'),
-#     ('2013-07-01', '2013-07-03'),
-#     ('2013-07-01', '2013-07-04'),
-#     ('2013-07-01', '2013-07-05'),
-#     ('FULL', '2013-07-01')
-# ]
-# local_nodes = ['2013-07-01', '2013-07-05']
-# local_nodes = [
-#     x for x in os.listdir('/btrfs/home.arc')
-#     if x != 'use_for_incr'
-# ]
-# graph = BackupDirectedAcyclicGraph(data, local_nodes)
 
 
 class NonZeroReturn(Exception):
@@ -38,14 +22,14 @@ class StorageDriver(object):
         raise NotImplementedError
         return ""
 
-    def generate_node_name(self):
-        raise NotImplementedError
-        return ""
-
     @contextmanager
     def get_snapstream(self, from_node, to_node, keep_node=False):
         raise NotImplementedError
         # yield OutputStream
+
+    def delete_node(self, node_name):
+        raise NotImplementedError
+        return None
 
 
 class StandardStorageDriver(StorageDriver):
@@ -62,9 +46,6 @@ class StandardStorageDriver(StorageDriver):
     def node_to_filename(self, node):
         return os.path.join(self._node_root, node)
 
-    def generate_node_name(self):
-        return datetime.now().isoformat()
-
     @contextmanager
     def get_snapstream(self, from_node, to_node, keep_node=False):
         retval = subprocess.Popen([
@@ -75,11 +56,14 @@ class StandardStorageDriver(StorageDriver):
         if 0 != retval:
             raise NonZeroReturn("btrfs command failure", retval)
         try:
-            args = [
-                'btrfs', 'send', '-p',
-                self.node_to_filename(from_node),
-                self.node_to_filename(to_node)
-            ]
+            if from_node:
+                args = [
+                    'btrfs', 'send', '-p',
+                    self.node_to_filename(from_node),
+                    self.node_to_filename(to_node)
+                ]
+            else:
+                args = ['btrfs', 'send', self.node_to_filename(to_node)]
             print ' '.join(args)
             subproc = subprocess.Popen(args, stdout=subprocess.PIPE)
             yield subproc
@@ -103,8 +87,19 @@ class StandardStorageDriver(StorageDriver):
                 if 0 != retval:
                     raise NonZeroReturn("btrfs command failure", retval)
 
+    def delete_node(self, node_names):
+        if isinstance(node_names, basestring):
+            node_names = [node_names]
+        retval = subprocess.Popen(
+            [
+                'btrfs', 'subvolume', 'delete',
+            ] + map(self.node_to_filename, node_names)
+        ).wait()
+        if 0 != retval:
+            raise NonZeroReturn("btrfs command failure", retval)
 
-def client_io(storage_driver, subprocess):
+
+def client_io(storage_driver, selection_constructor, subprocess):
     write_framed = partial(
         common.write_framed,
         '!I',
@@ -123,20 +118,24 @@ def client_io(storage_driver, subprocess):
 
     # select parent and make edge (parent, current)
     local_nodes = storage_driver.get_local_nodes()
-    best_parent = BackupDirectedAcyclicGraph(graph, local_nodes).best_parent()
+    policy = selection_constructor(graph, local_nodes)
+    __import__('pdb').set_trace()
+    best_parent = policy.best_parent()
 
-    newshot_node = storage_driver.generate_node_name()
+    newshot_node = policy.generate_node_name()
 
     edge = wire_pb2.Graph.GraphEdge()
-    edge.from_node = best_parent
+    edge.from_node = best_parent or 'FULL'
     edge.to_node = newshot_node
     write_framed(edge.SerializeToString())
     subprocess.stdout.close()
 
     with yield_pieces_output_manager(subprocess.stdin) as sink:
-        with storage_driver.get_snapstream(best_parent, newshot_node) as btrfs_send:
+        with storage_driver.get_snapstream(best_parent, newshot_node, True) as btrfs_send:
             for piece in yield_pieces(btrfs_send.stdout, with_magic=False):
                 sink.write(piece)
 
     subprocess.stdin.close()
     subprocess.wait()
+
+    policy.clean_local_nodes(storage_driver)
