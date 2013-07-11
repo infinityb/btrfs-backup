@@ -187,16 +187,21 @@ class MonthWeekDayHourTree(DirectedGraph):
                 node_obj = self._parse_node_name(node)
             except ValueError:
                 continue
-            if node_obj in self._nodes_by_height[self.MONTHLY_DEPTH]:
-                if _same_month(node_obj, now):
-                    keep.add(node)
-            if node_obj in self._nodes_by_height[self.WEEKLY_DEPTH]:
-                if _same_week(node_obj, now):
-                    keep.add(node)
-            if node_obj in self._nodes_by_height[self.DAILY_DEPTH]:
-                if _same_week(node_obj, now):
-                    keep.add(node)
-        storage_driver.delete_node(list(self._local_nodes - keep))
+            if self.MONTHLY_DEPTH in self._nodes_by_height:
+                if node in self._nodes_by_height[self.MONTHLY_DEPTH]:
+                    if _same_month(node_obj, now):
+                        keep.add(node)
+            if self.WEEKLY_DEPTH in self._nodes_by_height:
+                if node in self._nodes_by_height[self.WEEKLY_DEPTH]:
+                    if _same_week(node_obj, now):
+                        keep.add(node)
+            if self.DAILY_DEPTH in self._nodes_by_height:
+                if node in self._nodes_by_height[self.DAILY_DEPTH]:
+                    if _same_week(node_obj, now):
+                        keep.add(node)
+        to_delete = list(self._local_nodes - keep)
+        if to_delete:
+            storage_driver.delete_node(to_delete)
 
     def _scan_for_parent(self, now):
         for depth in [3, 2, 1]:

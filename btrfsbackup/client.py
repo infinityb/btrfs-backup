@@ -119,7 +119,6 @@ def client_io(storage_driver, selection_constructor, subprocess):
     # select parent and make edge (parent, current)
     local_nodes = storage_driver.get_local_nodes()
     policy = selection_constructor(graph, local_nodes)
-    __import__('pdb').set_trace()
     best_parent = policy.best_parent()
 
     newshot_node = policy.generate_node_name()
