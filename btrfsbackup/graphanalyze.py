@@ -181,12 +181,14 @@ class MonthWeekDayHourTree(DirectedGraph):
 
     def clean_local_nodes(self, storage_driver):
         now = datetime.now()
+        local_nodes = set()
         keep = set()
         for node in self._local_nodes:
             try:
                 node_obj = self._parse_node_name(node)
             except ValueError:
                 continue
+            local_nodes.add(node)
             if self.MONTHLY_DEPTH in self._nodes_by_height:
                 if node in self._nodes_by_height[self.MONTHLY_DEPTH]:
                     if _same_month(node_obj, now):
@@ -199,7 +201,7 @@ class MonthWeekDayHourTree(DirectedGraph):
                 if node in self._nodes_by_height[self.DAILY_DEPTH]:
                     if _same_week(node_obj, now):
                         keep.add(node)
-        to_delete = list(self._local_nodes - keep)
+        to_delete = list(local_nodes - keep)
         if to_delete:
             storage_driver.delete_node(to_delete)
 
